@@ -15,8 +15,10 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AppContactsRouteImport } from './routes/_app.contacts'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
+import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppSosRouteImport } from './routes/_app.sos'
 import { Route as AppIncidentsIndexRouteImport } from './routes/_app.incidents.index'
+import { Route as AppIncidentsIncidentIdRouteImport } from './routes/_app.incidents.$incidentId'
 import { Route as AppIncidentsNewRouteImport } from './routes/_app.incidents.new'
 
 const IndexRoute = IndexRouteImport.update({
@@ -48,6 +50,11 @@ const AppNotificationsRoute = AppNotificationsRouteImport.update({
   path: '/notifications',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSosRoute = AppSosRouteImport.update({
   id: '/sos',
   path: '/sos',
@@ -56,6 +63,11 @@ const AppSosRoute = AppSosRouteImport.update({
 const AppIncidentsIndexRoute = AppIncidentsIndexRouteImport.update({
   id: '/incidents/',
   path: '/incidents/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIncidentsIncidentIdRoute = AppIncidentsIncidentIdRouteImport.update({
+  id: '/incidents/$incidentId',
+  path: '/incidents/$incidentId',
   getParentRoute: () => AppRoute,
 } as any)
 const AppIncidentsNewRoute = AppIncidentsNewRouteImport.update({
@@ -70,7 +82,9 @@ export interface FileRoutesByFullPath {
   '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
   '/notifications': typeof AppNotificationsRoute
+  '/profile': typeof AppProfileRoute
   '/sos': typeof AppSosRoute
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/incidents/new': typeof AppIncidentsNewRoute
   '/incidents/': typeof AppIncidentsIndexRoute
 }
@@ -80,7 +94,9 @@ export interface FileRoutesByTo {
   '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
   '/notifications': typeof AppNotificationsRoute
+  '/profile': typeof AppProfileRoute
   '/sos': typeof AppSosRoute
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/incidents/new': typeof AppIncidentsNewRoute
   '/incidents': typeof AppIncidentsIndexRoute
 }
@@ -92,7 +108,9 @@ export interface FileRoutesById {
   '/_app/contacts': typeof AppContactsRoute
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/notifications': typeof AppNotificationsRoute
+  '/_app/profile': typeof AppProfileRoute
   '/_app/sos': typeof AppSosRoute
+  '/_app/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/_app/incidents/new': typeof AppIncidentsNewRoute
   '/_app/incidents/': typeof AppIncidentsIndexRoute
 }
@@ -104,7 +122,9 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/notifications'
+    | '/profile'
     | '/sos'
+    | '/incidents/$incidentId'
     | '/incidents/new'
     | '/incidents/'
   fileRoutesByTo: FileRoutesByTo
@@ -114,7 +134,9 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/dashboard'
     | '/notifications'
+    | '/profile'
     | '/sos'
+    | '/incidents/$incidentId'
     | '/incidents/new'
     | '/incidents'
   id:
@@ -125,7 +147,9 @@ export interface FileRouteTypes {
     | '/_app/contacts'
     | '/_app/dashboard'
     | '/_app/notifications'
+    | '/_app/profile'
     | '/_app/sos'
+    | '/_app/incidents/$incidentId'
     | '/_app/incidents/new'
     | '/_app/incidents/'
   fileRoutesById: FileRoutesById
@@ -180,6 +204,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNotificationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/sos': {
       id: '/_app/sos'
       path: '/sos'
@@ -192,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/incidents'
       fullPath: '/incidents/'
       preLoaderRoute: typeof AppIncidentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/incidents/$incidentId': {
+      id: '/_app/incidents/$incidentId'
+      path: '/incidents/$incidentId'
+      fullPath: '/incidents/$incidentId'
+      preLoaderRoute: typeof AppIncidentsIncidentIdRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/incidents/new': {
@@ -208,7 +246,9 @@ interface AppRouteChildren {
   AppContactsRoute: typeof AppContactsRoute
   AppDashboardRoute: typeof AppDashboardRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppSosRoute: typeof AppSosRoute
+  AppIncidentsIncidentIdRoute: typeof AppIncidentsIncidentIdRoute
   AppIncidentsNewRoute: typeof AppIncidentsNewRoute
   AppIncidentsIndexRoute: typeof AppIncidentsIndexRoute
 }
@@ -217,7 +257,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppContactsRoute: AppContactsRoute,
   AppDashboardRoute: AppDashboardRoute,
   AppNotificationsRoute: AppNotificationsRoute,
+  AppProfileRoute: AppProfileRoute,
   AppSosRoute: AppSosRoute,
+  AppIncidentsIncidentIdRoute: AppIncidentsIncidentIdRoute,
   AppIncidentsNewRoute: AppIncidentsNewRoute,
   AppIncidentsIndexRoute: AppIncidentsIndexRoute,
 }
