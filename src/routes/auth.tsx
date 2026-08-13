@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { motion } from "motion/react";
 import { Eye, EyeSlash, GoogleLogo, ShieldCheck, Siren, SpinnerGap } from "@phosphor-icons/react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -154,16 +153,16 @@ function AuthPage() {
 
   const handleGoogle = async () => {
     setSubmitting(true);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}${search.redirect ?? "/dashboard"}`,
+      },
     });
-    if (result.error) {
+    if (error) {
       setSubmitting(false);
       toast.error("Google sign-in failed. Please try again.");
-      return;
     }
-    if (result.redirected) return;
-    void navigate({ to: search.redirect ?? "/dashboard" });
   };
 
   return (
