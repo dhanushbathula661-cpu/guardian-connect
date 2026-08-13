@@ -10,33 +10,178 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/_app'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AppAdminRouteImport } from './routes/_app.admin'
+import { Route as AppContactsRouteImport } from './routes/_app.contacts'
+import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppMapRouteImport } from './routes/_app.map'
+import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
+import { Route as AppProfileRouteImport } from './routes/_app.profile'
+import { Route as AppSosRouteImport } from './routes/_app.sos'
+import { Route as AppIncidentsIndexRouteImport } from './routes/_app.incidents.index'
+import { Route as AppIncidentsIncidentIdRouteImport } from './routes/_app.incidents.$incidentId'
+import { Route as AppIncidentsNewRouteImport } from './routes/_app.incidents.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContactsRoute = AppContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMapRoute = AppMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppNotificationsRoute = AppNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSosRoute = AppSosRouteImport.update({
+  id: '/sos',
+  path: '/sos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIncidentsIndexRoute = AppIncidentsIndexRouteImport.update({
+  id: '/incidents/',
+  path: '/incidents/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIncidentsIncidentIdRoute = AppIncidentsIncidentIdRouteImport.update({
+  id: '/incidents/$incidentId',
+  path: '/incidents/$incidentId',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIncidentsNewRoute = AppIncidentsNewRouteImport.update({
+  id: '/incidents/new',
+  path: '/incidents/new',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/admin': typeof AppAdminRoute
+  '/contacts': typeof AppContactsRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/map': typeof AppMapRoute
+  '/notifications': typeof AppNotificationsRoute
+  '/profile': typeof AppProfileRoute
+  '/sos': typeof AppSosRoute
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/incidents/new': typeof AppIncidentsNewRoute
+  '/incidents/': typeof AppIncidentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/admin': typeof AppAdminRoute
+  '/contacts': typeof AppContactsRoute
+  '/dashboard': typeof AppDashboardRoute
+  '/map': typeof AppMapRoute
+  '/notifications': typeof AppNotificationsRoute
+  '/profile': typeof AppProfileRoute
+  '/sos': typeof AppSosRoute
+  '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/incidents/new': typeof AppIncidentsNewRoute
+  '/incidents': typeof AppIncidentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_app/admin': typeof AppAdminRoute
+  '/_app/contacts': typeof AppContactsRoute
+  '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/map': typeof AppMapRoute
+  '/_app/notifications': typeof AppNotificationsRoute
+  '/_app/profile': typeof AppProfileRoute
+  '/_app/sos': typeof AppSosRoute
+  '/_app/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
+  '/_app/incidents/new': typeof AppIncidentsNewRoute
+  '/_app/incidents/': typeof AppIncidentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/contacts'
+    | '/dashboard'
+    | '/map'
+    | '/notifications'
+    | '/profile'
+    | '/sos'
+    | '/incidents/$incidentId'
+    | '/incidents/new'
+    | '/incidents/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/contacts'
+    | '/dashboard'
+    | '/map'
+    | '/notifications'
+    | '/profile'
+    | '/sos'
+    | '/incidents/$incidentId'
+    | '/incidents/new'
+    | '/incidents'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/auth'
+    | '/_app/admin'
+    | '/_app/contacts'
+    | '/_app/dashboard'
+    | '/_app/map'
+    | '/_app/notifications'
+    | '/_app/profile'
+    | '/_app/sos'
+    | '/_app/incidents/$incidentId'
+    | '/_app/incidents/new'
+    | '/_app/incidents/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +193,125 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/contacts': {
+      id: '/_app/contacts'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof AppContactsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/dashboard': {
+      id: '/_app/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/map': {
+      id: '/_app/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof AppMapRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/notifications': {
+      id: '/_app/notifications'
+      path: '/notifications'
+      fullPath: '/notifications'
+      preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sos': {
+      id: '/_app/sos'
+      path: '/sos'
+      fullPath: '/sos'
+      preLoaderRoute: typeof AppSosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/incidents/': {
+      id: '/_app/incidents/'
+      path: '/incidents'
+      fullPath: '/incidents/'
+      preLoaderRoute: typeof AppIncidentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/incidents/$incidentId': {
+      id: '/_app/incidents/$incidentId'
+      path: '/incidents/$incidentId'
+      fullPath: '/incidents/$incidentId'
+      preLoaderRoute: typeof AppIncidentsIncidentIdRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/incidents/new': {
+      id: '/_app/incidents/new'
+      path: '/incidents/new'
+      fullPath: '/incidents/new'
+      preLoaderRoute: typeof AppIncidentsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
+  AppContactsRoute: typeof AppContactsRoute
+  AppDashboardRoute: typeof AppDashboardRoute
+  AppMapRoute: typeof AppMapRoute
+  AppNotificationsRoute: typeof AppNotificationsRoute
+  AppProfileRoute: typeof AppProfileRoute
+  AppSosRoute: typeof AppSosRoute
+  AppIncidentsIncidentIdRoute: typeof AppIncidentsIncidentIdRoute
+  AppIncidentsNewRoute: typeof AppIncidentsNewRoute
+  AppIncidentsIndexRoute: typeof AppIncidentsIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
+  AppContactsRoute: AppContactsRoute,
+  AppDashboardRoute: AppDashboardRoute,
+  AppMapRoute: AppMapRoute,
+  AppNotificationsRoute: AppNotificationsRoute,
+  AppProfileRoute: AppProfileRoute,
+  AppSosRoute: AppSosRoute,
+  AppIncidentsIncidentIdRoute: AppIncidentsIncidentIdRoute,
+  AppIncidentsNewRoute: AppIncidentsNewRoute,
+  AppIncidentsIndexRoute: AppIncidentsIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
