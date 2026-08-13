@@ -16,6 +16,8 @@ import { Route as AppContactsRouteImport } from './routes/_app.contacts'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppSosRouteImport } from './routes/_app.sos'
+import { Route as AppIncidentsIndexRouteImport } from './routes/_app.incidents.index'
+import { Route as AppIncidentsNewRouteImport } from './routes/_app.incidents.new'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -51,6 +53,16 @@ const AppSosRoute = AppSosRouteImport.update({
   path: '/sos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppIncidentsIndexRoute = AppIncidentsIndexRouteImport.update({
+  id: '/incidents/',
+  path: '/incidents/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppIncidentsNewRoute = AppIncidentsNewRouteImport.update({
+  id: '/incidents/new',
+  path: '/incidents/new',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -59,6 +71,8 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/notifications': typeof AppNotificationsRoute
   '/sos': typeof AppSosRoute
+  '/incidents/new': typeof AppIncidentsNewRoute
+  '/incidents/': typeof AppIncidentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,6 +81,8 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/notifications': typeof AppNotificationsRoute
   '/sos': typeof AppSosRoute
+  '/incidents/new': typeof AppIncidentsNewRoute
+  '/incidents': typeof AppIncidentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,13 +93,30 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/sos': typeof AppSosRoute
+  '/_app/incidents/new': typeof AppIncidentsNewRoute
+  '/_app/incidents/': typeof AppIncidentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/contacts' | '/dashboard' | '/notifications' | '/sos'
+    | '/'
+    | '/auth'
+    | '/contacts'
+    | '/dashboard'
+    | '/notifications'
+    | '/sos'
+    | '/incidents/new'
+    | '/incidents/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/contacts' | '/dashboard' | '/notifications' | '/sos'
+  to:
+    | '/'
+    | '/auth'
+    | '/contacts'
+    | '/dashboard'
+    | '/notifications'
+    | '/sos'
+    | '/incidents/new'
+    | '/incidents'
   id:
     | '__root__'
     | '/'
@@ -93,6 +126,8 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/notifications'
     | '/_app/sos'
+    | '/_app/incidents/new'
+    | '/_app/incidents/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -152,6 +187,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/incidents/': {
+      id: '/_app/incidents/'
+      path: '/incidents'
+      fullPath: '/incidents/'
+      preLoaderRoute: typeof AppIncidentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/incidents/new': {
+      id: '/_app/incidents/new'
+      path: '/incidents/new'
+      fullPath: '/incidents/new'
+      preLoaderRoute: typeof AppIncidentsNewRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
@@ -160,6 +209,8 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppSosRoute: typeof AppSosRoute
+  AppIncidentsNewRoute: typeof AppIncidentsNewRoute
+  AppIncidentsIndexRoute: typeof AppIncidentsIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -167,6 +218,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppNotificationsRoute: AppNotificationsRoute,
   AppSosRoute: AppSosRoute,
+  AppIncidentsNewRoute: AppIncidentsNewRoute,
+  AppIncidentsIndexRoute: AppIncidentsIndexRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
