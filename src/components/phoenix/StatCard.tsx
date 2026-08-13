@@ -45,7 +45,7 @@ export function StatCard({
   icon: Icon;
   tone?: "primary" | "warning" | "success" | "emergency";
   index?: number;
-  hint?: string;
+  hint?: string | undefined;
 }) {
   const toneClass = {
     primary: "text-primary bg-primary/12",

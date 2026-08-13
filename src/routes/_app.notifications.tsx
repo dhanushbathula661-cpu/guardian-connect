@@ -27,11 +27,12 @@ export const Route = createFileRoute("/_app/notifications")({
   component: NotificationsPage,
 });
 
-const ICONS = {
+const ICONS: Record<string, typeof Info> = {
   SOS: Siren,
   INCIDENT: WarningCircle,
   STATUS_UPDATE: CheckCircle,
   SYSTEM: Info,
+  EMERGENCY_SERVICE: Info,
 } as const;
 
 function NotificationsPage() {

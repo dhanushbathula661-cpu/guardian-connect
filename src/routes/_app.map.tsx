@@ -66,7 +66,10 @@ function MapPage() {
           kind: KINDS[element.tags?.["amenity"] ?? ""] ?? "Service",
           lat: element.lat,
           lon: element.lon,
-          km: distanceKm(position.latitude, position.longitude, element.lat, element.lon),
+          km: distanceKm(
+            { lat: position.latitude, lon: position.longitude },
+            { lat: element.lat, lon: element.lon },
+          ),
         }))
         .sort((a, b) => a.km - b.km)
         .slice(0, 20);
