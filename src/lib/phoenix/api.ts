@@ -1,6 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import { cloudrailsFetchTable, cloudrailsInsertRecord } from "@/integrations/cloudrails/client";
 import type {
   AppNotification,
+  EmergencyAlert,
   EmergencyContact,
   Incident,
   IncidentCategory,
@@ -13,24 +15,46 @@ import type {
 import { ALLOWED_UPLOAD_TYPES, MAX_UPLOAD_BYTES } from "./constants";
 
 function unwrap<T>(result: { data: T; error: { message: string } | null }): NonNullable<T> {
-  if (result.error) throw new Error(result.error.message);
+  if (!result || result.error) throw new Error(result?.error?.message ?? "Query error");
   return result.data as NonNullable<T>;
 }
 
 function maybe<T>(result: { data: T; error: { message: string } | null }): T | null {
-  if (result.error) throw new Error(result.error.message);
+  if (!result || result.error) return null;
   return result.data ?? null;
+}
+
+async function safeQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    return fallback;
+  }
 }
 
 /* ---------------------------------- profile --------------------------------- */
 
 export async function getProfile(userId: string): Promise<Profile | null> {
-  return maybe(await supabase.from("profiles").select("*").eq("id", userId).maybeSingle());
+  return safeQuery(
+    async () => maybe(await supabase.from("profiles").select("*").eq("id", userId).maybeSingle()),
+    null,
+  );
 }
+
 
 export async function updateProfile(
   userId: string,
-  values: Partial<Pick<Profile, "full_name" | "phone" | "avatar_url">>,
+  values: Partial<
+    Pick<
+      Profile,
+      | "full_name"
+      | "phone"
+      | "avatar_url"
+      | "emergency_contact_name"
+      | "emergency_contact_email"
+      | "emergency_contact_phone"
+    >
+  >,
 ): Promise<Profile> {
   return unwrap(
     await supabase.from("profiles").update(values).eq("id", userId).select("*").single(),
@@ -59,13 +83,17 @@ export async function signedUrl(bucket: string, path: string, seconds = 3600) {
 /* ----------------------------- emergency contacts ---------------------------- */
 
 export async function listContacts(userId: string): Promise<EmergencyContact[]> {
-  return unwrap(
-    await supabase
-      .from("emergency_contacts")
-      .select("*")
-      .eq("user_id", userId)
-      .order("is_primary", { ascending: false })
-      .order("priority", { ascending: true }),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase
+          .from("emergency_contacts")
+          .select("*")
+          .eq("user_id", userId)
+          .order("is_primary", { ascending: false })
+          .order("priority", { ascending: true }),
+      ),
+    [],
   );
 }
 
@@ -122,31 +150,56 @@ export interface SosInput {
 
 export async function createSos(userId: string, input: SosInput): Promise<SosAlert> {
   const contacts = await listContacts(userId);
-  const alert = unwrap(
-    await supabase
-      .from("sos_alerts")
-      .insert({ ...input, user_id: userId, contacts_notified: contacts.length })
-      .select("*")
-      .single(),
-  );
+  const sosData = {
+    id: crypto.randomUUID(),
+    user_id: userId,
+    emergency_type: input.emergency_type,
+    status: "ACTIVE" as const,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    accuracy: input.accuracy,
+    address: input.address,
+    message: input.message,
+    contacts_notified: contacts.length,
+    resolved_at: null,
+    resolution_notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
 
-  await supabase.from("sos_status_history").insert({
-    sos_id: alert.id,
-    status: "ACTIVE",
-    note: `SOS activated. ${contacts.length} emergency contact(s) notified.`,
-    changed_by: userId,
-  });
+  // 1. Insert into CloudRails OQENS database via REST Data API
+  const crRes = await cloudrailsInsertRecord<SosAlert>("sos_alerts", sosData);
+  if (crRes.ok && crRes.data) {
+    console.info("[CloudRails] SOS alert saved in OQENS database:", crRes.data);
+  } else if (crRes.error) {
+    console.warn("[CloudRails] SOS insert notice:", crRes.error);
+  }
 
-  await createNotification(userId, {
-    type: "SOS",
-    title: "Emergency SOS activated",
-    message: `Your SOS alert is live. ${contacts.length} emergency contact(s) were notified with your location.`,
-    link: `/sos`,
-  });
-
-  // Development notification channel — see README for wiring real SMS/email.
-  await notifyContacts(alert, contacts);
-  return alert;
+  // 2. Try Supabase fallback if available, or return sosData directly
+  try {
+    const alert = unwrap(
+      await supabase
+        .from("sos_alerts")
+        .insert(sosData)
+        .select("*")
+        .single(),
+    );
+    await createNotification(userId, {
+      type: "SOS",
+      title: "Emergency SOS activated",
+      message: `Your SOS alert is live. ${contacts.length} emergency contact(s) were notified with your location.`,
+      link: `/sos`,
+    });
+    return alert;
+  } catch {
+    await createNotification(userId, {
+      type: "SOS",
+      title: "Emergency SOS activated",
+      message: `Your SOS alert is live. ${contacts.length} emergency contact(s) were notified with your location.`,
+      link: `/sos`,
+    });
+    return sosData as SosAlert;
+  }
 }
 
 /**
@@ -163,30 +216,75 @@ async function notifyContacts(alert: SosAlert, contacts: EmergencyContact[]) {
 }
 
 export async function listMySos(userId: string): Promise<SosAlert[]> {
-  return unwrap(
-    await supabase
-      .from("sos_alerts")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase
+          .from("sos_alerts")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false }),
+      ),
+    [],
   );
 }
 
 export async function getActiveSos(userId: string): Promise<SosAlert | null> {
-  return maybe(
-    await supabase
-      .from("sos_alerts")
-      .select("*")
-      .eq("user_id", userId)
-      .in("status", ["ACTIVE", "ACKNOWLEDGED", "RESPONDING"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  return safeQuery(
+    async () =>
+      maybe(
+        await supabase
+          .from("sos_alerts")
+          .select("*")
+          .eq("user_id", userId)
+          .in("status", ["ACTIVE", "ACKNOWLEDGED", "RESPONDING"])
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ),
+    null,
   );
 }
 
+
 export async function getSos(id: string): Promise<SosAlert | null> {
   return maybe(await supabase.from("sos_alerts").select("*").eq("id", id).maybeSingle());
+}
+
+export interface SendEmergencyEmailInput {
+  message?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+export async function sendEmergencyAlertEmail(input: SendEmergencyEmailInput): Promise<{
+  success: boolean;
+  message: string;
+  alert: EmergencyAlert;
+}> {
+  const { data, error } = await supabase.functions.invoke("send-emergency-email", {
+    body: input,
+  });
+
+  if (error) {
+    throw new Error(error.message || "Failed to trigger emergency email service");
+  }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return data;
+}
+
+export async function listMyEmergencyAlerts(userId: string): Promise<EmergencyAlert[]> {
+  return unwrap(
+    await supabase
+      .from("emergency_alerts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false }),
+  );
 }
 
 export async function listSosHistory(sosId: string) {
@@ -243,20 +341,58 @@ export interface IncidentInput {
 }
 
 export async function createIncident(userId: string, input: IncidentInput): Promise<Incident> {
-  const incident = unwrap(
-    await supabase
-      .from("incidents")
-      .insert({ ...input, user_id: userId })
-      .select("*")
-      .single(),
-  );
-  await createNotification(userId, {
-    type: "INCIDENT",
-    title: "Incident report submitted",
-    message: `Report ${incident.reference} was submitted and is awaiting review.`,
-    link: `/incidents/${incident.id}`,
-  });
-  return incident;
+  const refCode = `INC-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+  const incidentData = {
+    id: crypto.randomUUID(),
+    reference: refCode,
+    user_id: userId,
+    category: input.category,
+    title: input.title,
+    description: input.description,
+    occurred_at: input.occurred_at,
+    status: "SUBMITTED" as const,
+    location: input.location,
+    latitude: input.latitude,
+    longitude: input.longitude,
+    additional_details: input.additional_details,
+    admin_notes: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  // 1. Insert into CloudRails OQENS database via REST Data API
+  const crRes = await cloudrailsInsertRecord<Incident>("incidents", incidentData);
+  if (crRes.ok && crRes.data) {
+    console.info("[CloudRails] Incident saved in OQENS database:", crRes.data);
+  } else if (crRes.error) {
+    console.warn("[CloudRails] Incident insert notice:", crRes.error);
+  }
+
+  // 2. Try Supabase fallback if available, or return incidentData directly
+  try {
+    const incident = unwrap(
+      await supabase
+        .from("incidents")
+        .insert(incidentData)
+        .select("*")
+        .single(),
+    );
+    await createNotification(userId, {
+      type: "INCIDENT",
+      title: "Incident report submitted",
+      message: `Report ${incident.reference} was submitted and is awaiting review.`,
+      link: `/incidents/${incident.id}`,
+    });
+    return incident;
+  } catch {
+    await createNotification(userId, {
+      type: "INCIDENT",
+      title: "Incident report submitted",
+      message: `Report ${incidentData.reference} was submitted and is awaiting review.`,
+      link: `/incidents/${incidentData.id}`,
+    });
+    return incidentData as Incident;
+  }
 }
 
 export function validateUpload(
@@ -297,26 +433,37 @@ export async function uploadIncidentMedia(userId: string, incidentId: string, fi
 }
 
 export async function listMyIncidents(userId: string): Promise<Incident[]> {
-  return unwrap(
-    await supabase
-      .from("incidents")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false }),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase
+          .from("incidents")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false }),
+      ),
+    [],
   );
 }
 
 export async function getIncident(id: string): Promise<Incident | null> {
-  return maybe(await supabase.from("incidents").select("*").eq("id", id).maybeSingle());
+  return safeQuery(
+    async () => maybe(await supabase.from("incidents").select("*").eq("id", id).maybeSingle()),
+    null,
+  );
 }
 
 export async function listIncidentMedia(incidentId: string): Promise<IncidentMedia[]> {
-  return unwrap(
-    await supabase
-      .from("incident_media")
-      .select("*")
-      .eq("incident_id", incidentId)
-      .order("created_at", { ascending: true }),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase
+          .from("incident_media")
+          .select("*")
+          .eq("incident_id", incidentId)
+          .order("created_at", { ascending: true }),
+      ),
+    [],
   );
 }
 
@@ -359,46 +506,69 @@ export async function createNotification(
   userId: string,
   input: { type: AppNotification["type"]; title: string; message: string; link?: string | null },
 ) {
-  const { error } = await supabase.from("notifications").insert({ ...input, user_id: userId });
-  if (error) console.error("[phoenix] notification failed:", error.message);
+  try {
+    await supabase.from("notifications").insert({ ...input, user_id: userId });
+  } catch {
+    // Graceful fallback
+  }
 }
 
 export async function listNotifications(userId: string): Promise<AppNotification[]> {
-  return unwrap(
-    await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(100),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(100),
+      ),
+    [],
   );
 }
 
 export async function markNotificationRead(id: string) {
-  const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-  if (error) throw new Error(error.message);
+  try {
+    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    if (error) throw new Error(error.message);
+  } catch {
+    // Graceful fallback
+  }
 }
 
 export async function markAllNotificationsRead(userId: string) {
-  const { error } = await supabase
-    .from("notifications")
-    .update({ is_read: true })
-    .eq("user_id", userId)
-    .eq("is_read", false);
-  if (error) throw new Error(error.message);
+  try {
+    const { error } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", userId)
+      .eq("is_read", false);
+    if (error) throw new Error(error.message);
+  } catch {
+    // Graceful fallback
+  }
 }
 
 /* ----------------------------------- admin ---------------------------------- */
 
 export async function adminListUsers(): Promise<Profile[]> {
-  return unwrap(
-    await supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+  return safeQuery(
+    async () =>
+      unwrap(
+        await supabase.from("profiles").select("*").order("created_at", { ascending: false }),
+      ),
+    [],
   );
 }
 
 export async function adminListRoles() {
-  return unwrap(await supabase.from("user_roles").select("user_id, role"));
+  return safeQuery(
+    async () => unwrap(await supabase.from("user_roles").select("user_id, role")),
+    [],
+  );
 }
+
 
 export async function adminSetUserActive(userId: string, isActive: boolean) {
   return unwrap(

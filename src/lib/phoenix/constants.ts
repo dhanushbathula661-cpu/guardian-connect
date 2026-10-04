@@ -9,6 +9,7 @@ export type AppRole = Database["public"]["Enums"]["app_role"];
 export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export type EmergencyContact = Database["public"]["Tables"]["emergency_contacts"]["Row"];
 export type SosAlert = Database["public"]["Tables"]["sos_alerts"]["Row"];
+export type EmergencyAlert = Database["public"]["Tables"]["emergency_alerts"]["Row"];
 export type Incident = Database["public"]["Tables"]["incidents"]["Row"];
 export type IncidentMedia = Database["public"]["Tables"]["incident_media"]["Row"];
 export type AppNotification = Database["public"]["Tables"]["notifications"]["Row"];

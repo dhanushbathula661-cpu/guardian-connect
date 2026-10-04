@@ -19,6 +19,7 @@ import { Route as AppMapRouteImport } from './routes/_app.map'
 import { Route as AppNotificationsRouteImport } from './routes/_app.notifications'
 import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppSosRouteImport } from './routes/_app.sos'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AppIncidentsIndexRouteImport } from './routes/_app.incidents.index'
 import { Route as AppIncidentsIncidentIdRouteImport } from './routes/_app.incidents.$incidentId'
 import { Route as AppIncidentsNewRouteImport } from './routes/_app.incidents.new'
@@ -72,6 +73,11 @@ const AppSosRoute = AppSosRouteImport.update({
   path: '/sos',
   getParentRoute: () => AppRoute,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/callback',
+  path: '/callback',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AppIncidentsIndexRoute = AppIncidentsIndexRouteImport.update({
   id: '/incidents/',
   path: '/incidents/',
@@ -90,7 +96,7 @@ const AppIncidentsNewRoute = AppIncidentsNewRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/admin': typeof AppAdminRoute
   '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
@@ -98,13 +104,14 @@ export interface FileRoutesByFullPath {
   '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/sos': typeof AppSosRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/incidents/new': typeof AppIncidentsNewRoute
   '/incidents/': typeof AppIncidentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/admin': typeof AppAdminRoute
   '/contacts': typeof AppContactsRoute
   '/dashboard': typeof AppDashboardRoute
@@ -112,6 +119,7 @@ export interface FileRoutesByTo {
   '/notifications': typeof AppNotificationsRoute
   '/profile': typeof AppProfileRoute
   '/sos': typeof AppSosRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/incidents/new': typeof AppIncidentsNewRoute
   '/incidents': typeof AppIncidentsIndexRoute
@@ -120,7 +128,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
-  '/auth': typeof AuthRoute
+  '/auth': typeof AuthRouteWithChildren
   '/_app/admin': typeof AppAdminRoute
   '/_app/contacts': typeof AppContactsRoute
   '/_app/dashboard': typeof AppDashboardRoute
@@ -128,6 +136,7 @@ export interface FileRoutesById {
   '/_app/notifications': typeof AppNotificationsRoute
   '/_app/profile': typeof AppProfileRoute
   '/_app/sos': typeof AppSosRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/_app/incidents/$incidentId': typeof AppIncidentsIncidentIdRoute
   '/_app/incidents/new': typeof AppIncidentsNewRoute
   '/_app/incidents/': typeof AppIncidentsIndexRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/sos'
+    | '/auth/callback'
     | '/incidents/$incidentId'
     | '/incidents/new'
     | '/incidents/'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/notifications'
     | '/profile'
     | '/sos'
+    | '/auth/callback'
     | '/incidents/$incidentId'
     | '/incidents/new'
     | '/incidents'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/_app/notifications'
     | '/_app/profile'
     | '/_app/sos'
+    | '/auth/callback'
     | '/_app/incidents/$incidentId'
     | '/_app/incidents/new'
     | '/_app/incidents/'
@@ -181,7 +193,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
-  AuthRoute: typeof AuthRoute
+  AuthRoute: typeof AuthRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -256,6 +268,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_app/incidents/': {
       id: '/_app/incidents/'
       path: '/incidents'
@@ -308,10 +327,20 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface AuthRouteChildren {
+  AuthCallbackRoute: typeof AuthCallbackRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthCallbackRoute: AuthCallbackRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
-  AuthRoute: AuthRoute,
+  AuthRoute: AuthRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

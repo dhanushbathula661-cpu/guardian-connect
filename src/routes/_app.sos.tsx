@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
@@ -6,10 +6,13 @@ import { toast } from "sonner";
 import {
   CheckCircle,
   Crosshair,
+  EnvelopeSimple,
   MapPin,
+  PaperPlaneTilt,
   ShieldWarning,
   Siren,
   SpinnerGap,
+  UserGear,
   XCircle,
 } from "@phosphor-icons/react";
 import { PageHeader } from "@/components/phoenix/AppShell";
@@ -17,6 +20,7 @@ import { StatusBadge } from "@/components/phoenix/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -35,13 +39,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/lib/phoenix/auth";
 import {
   createSos,
   getActiveSos,
   listContacts,
+  listMyEmergencyAlerts,
   listMySos,
   listSosHistory,
+  sendEmergencyAlertEmail,
+  updateProfile,
   updateSosStatus,
 } from "@/lib/phoenix/api";
 import { getCurrentPosition, reverseGeocode } from "@/lib/phoenix/geolocation";
@@ -57,10 +72,10 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 export const Route = createFileRoute("/_app/sos")({
   head: () => ({
     meta: [
-      { title: "Emergency SOS — PHOENIX" },
-      { name: "description", content: "Trigger a one-tap emergency SOS with live GPS location." },
-      { property: "og:title", content: "Emergency SOS — PHOENIX" },
-      { property: "og:description", content: "One-tap emergency SOS with live GPS location." },
+      { title: "Emergency SOS — Guardian Connect" },
+      { name: "description", content: "Trigger a one-tap emergency SOS with live GPS location and email alerts." },
+      { property: "og:title", content: "Emergency SOS — Guardian Connect" },
+      { property: "og:description", content: "One-tap emergency SOS with live GPS location and email alerts." },
     ],
   }),
   component: SosPage,
@@ -74,17 +89,42 @@ interface Located {
 }
 
 function SosPage() {
-  const { user } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const queryClient = useQueryClient();
   const reduced = useReducedMotion();
   const [type, setType] = useState<string>("GENERAL");
   const [message, setMessage] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [quickContactOpen, setQuickContactOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickEmail, setQuickEmail] = useState("");
+  const [quickPhone, setQuickPhone] = useState("");
   const [holdProgress, setHoldProgress] = useState(0);
   const [location, setLocation] = useState<Located | null>(null);
   const [locating, setLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const holdTimer = useRef<number | null>(null);
+
+  const saveQuickContact = useMutation({
+    mutationFn: async () => {
+      if (!quickName.trim()) throw new Error("Please enter contact name.");
+      if (!quickEmail.trim() || !quickEmail.includes("@")) throw new Error("Please enter a valid email address.");
+      await updateProfile(user!.id, {
+        full_name: profile?.full_name || "User",
+        phone: profile?.phone ?? null,
+        emergency_contact_name: quickName.trim(),
+        emergency_contact_email: quickEmail.trim(),
+        emergency_contact_phone: quickPhone.trim() || null,
+      });
+      await refreshProfile();
+    },
+    onSuccess: () => {
+      toast.success("Emergency contact saved! Emergency SOS feature is enabled.");
+      setQuickContactOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const captureLocation = async () => {
     setLocating(true);
@@ -118,6 +158,12 @@ function SosPage() {
     enabled: Boolean(user?.id),
   });
 
+  const { data: emergencyEmailAlerts = [] } = useQuery({
+    queryKey: ["emergency-alerts-history", user?.id],
+    queryFn: () => listMyEmergencyAlerts(user!.id),
+    enabled: Boolean(user?.id),
+  });
+
   const { data: contacts = [] } = useQuery({
     queryKey: ["contacts", user?.id],
     queryFn: () => listContacts(user!.id),
@@ -131,25 +177,51 @@ function SosPage() {
     refetchInterval: 15000,
   });
 
+  // Effective emergency contact email
+  const configuredEmail = profile?.emergency_contact_email?.trim() || contacts.find((c) => c.email)?.email?.trim() || null;
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["sos-active"] });
     void queryClient.invalidateQueries({ queryKey: ["sos-history"] });
+    void queryClient.invalidateQueries({ queryKey: ["emergency-alerts-history"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["notifications"] });
   };
 
   const trigger = useMutation({
-    mutationFn: async () =>
-      createSos(user!.id, {
+    mutationFn: async () => {
+      // 1. Create SOS Record in database
+      const sosAlert = await createSos(user!.id, {
         emergency_type: type,
         latitude: location?.latitude ?? null,
         longitude: location?.longitude ?? null,
         accuracy: location?.accuracy ?? null,
         address: location?.address ?? null,
         message: message.trim() ? message.trim().slice(0, 500) : null,
-      }),
-    onSuccess: () => {
-      toast.success("SOS sent. Your contacts have been notified.");
+      });
+
+      // 2. Invoke Supabase Edge Function to send Emergency Email via Resend
+      let emailResult;
+      try {
+        emailResult = await sendEmergencyAlertEmail({
+          message: message.trim() || `Emergency ${type} alert triggered by ${profile?.full_name || "user"}.`,
+          latitude: location?.latitude ?? null,
+          longitude: location?.longitude ?? null,
+        });
+      } catch (err: unknown) {
+        console.error("Edge function emergency email failed:", err);
+        const errMsg = err instanceof Error ? err.message : "Failed to dispatch email alert";
+        toast.error(`Email dispatch warning: ${errMsg}`);
+      }
+
+      return { sosAlert, emailResult };
+    },
+    onSuccess: (data) => {
+      if (data.emailResult?.success) {
+        toast.success(`SOS broadcasted & emergency email dispatched to ${data.emailResult.alert.email_sent_to}`);
+      } else {
+        toast.success("Emergency SOS broadcasted.");
+      }
       setMessage("");
       invalidate();
     },
@@ -168,6 +240,18 @@ function SosPage() {
 
   const startHold = () => {
     if (active) return;
+    if (!user) {
+      toast.error("Please login before using the emergency feature.");
+      return;
+    }
+    if (!configuredEmail) {
+      toast.error("Please configure an emergency contact before using this feature.");
+      setQuickName(profile?.emergency_contact_name || "");
+      setQuickEmail(profile?.emergency_contact_email || "");
+      setQuickPhone(profile?.emergency_contact_phone || "");
+      setQuickContactOpen(true);
+      return;
+    }
     const started = Date.now();
     holdTimer.current = window.setInterval(() => {
       const progress = Math.min((Date.now() - started) / 1200, 1);
@@ -191,8 +275,36 @@ function SosPage() {
     <>
       <PageHeader
         title="Emergency SOS"
-        description="Hold the button for one second, then confirm. Help gets your location instantly."
+        description="Hold the button for one second to send an instant location alert & email emergency dispatch."
       />
+
+      {/* Warning Banner if Emergency Contact Missing */}
+      {!configuredEmail ? (
+        <Card className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200">
+          <div className="flex items-center gap-3">
+            <ShieldWarning size={28} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <div>
+              <p className="font-semibold text-sm">Emergency contact email required</p>
+              <p className="text-xs text-muted-foreground">
+                Please configure an emergency contact email in your profile so server alerts can be dispatched immediately.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 shrink-0"
+            onClick={() => {
+              setQuickName(profile?.emergency_contact_name || "");
+              setQuickEmail(profile?.emergency_contact_email || "");
+              setQuickPhone(profile?.emergency_contact_phone || "");
+              setQuickContactOpen(true);
+            }}
+          >
+            <UserGear size={16} /> Configure Contact
+          </Button>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
         <Card className="items-center gap-6 p-8 text-center">
@@ -241,9 +353,8 @@ function SosPage() {
             <>
               <div className="relative grid place-items-center">
                 <span
-                  className={`absolute h-52 w-52 rounded-full bg-emergency/20 ${
-                    reduced ? "" : "sos-pulse"
-                  }`}
+                  className={`absolute h-52 w-52 rounded-full bg-emergency/20 ${reduced ? "" : "sos-pulse"
+                    }`}
                   aria-hidden
                 />
                 <motion.button
@@ -306,7 +417,7 @@ function SosPage() {
                 maxLength={500}
                 disabled={Boolean(active)}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Anything responders should know…"
+                placeholder="Anything emergency contacts should know…"
               />
             </div>
           </Card>
@@ -339,48 +450,104 @@ function SosPage() {
             {locationError ? (
               <p className="flex items-start gap-2 text-xs text-warning">
                 <ShieldWarning size={16} className="mt-0.5 shrink-0" />
-                You can still send an SOS, but responders won't get coordinates.
+                You can still send an SOS, but the email will indicate location was unavailable.
               </p>
             ) : null}
           </Card>
 
           <Card className="gap-2 p-6">
-            <h2 className="text-lg font-semibold">Contacts to notify</h2>
-            {contacts.length ? (
-              <ul className="space-y-2 text-sm">
-                {contacts.slice(0, 4).map((contact) => (
-                  <li key={contact.id} className="flex items-center justify-between gap-3">
-                    <span className="truncate">{contact.name}</span>
-                    <span className="text-xs text-muted-foreground">{contact.phone}</span>
-                  </li>
-                ))}
-              </ul>
+            <h2 className="text-lg font-semibold">Configured Recipient</h2>
+            {configuredEmail ? (
+              <div className="space-y-1 text-sm">
+                <p className="font-medium text-foreground flex items-center gap-2">
+                  <EnvelopeSimple size={16} className="text-primary" /> {configuredEmail}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Receives emergency email dispatch via Supabase Edge Function & Resend API.
+                </p>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No emergency contacts yet — add them so alerts reach someone.
+                No emergency contact configured yet.
               </p>
             )}
           </Card>
         </div>
       </div>
 
-      {history.length ? (
+      {/* Emergency Email Alert History Section */}
+      {emergencyEmailAlerts.length ? (
         <Card className="mt-8 p-6">
-          <h2 className="text-lg font-semibold">SOS history</h2>
-          <ul className="mt-4 divide-y divide-border">
-            {history.map((alert) => (
-              <li key={alert.id} className="flex items-center justify-between gap-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{labelize(alert.emergency_type)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDateTime(alert.created_at)}
-                    {alert.address ? ` · ${alert.address}` : ""}
-                  </p>
-                </div>
-                <StatusBadge status={alert.status} tone={SOS_STATUS_TONE[alert.status]} />
-              </li>
-            ))}
-          </ul>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <PaperPlaneTilt size={20} className="text-primary" /> Server Emergency Alert History
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Emergency emails processed by Supabase Edge Function & Resend API.
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-border text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="pb-3 font-semibold">Date & Time</th>
+                  <th className="pb-3 font-semibold">Recipient</th>
+                  <th className="pb-3 font-semibold">Message</th>
+                  <th className="pb-3 font-semibold">Location</th>
+                  <th className="pb-3 font-semibold text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {emergencyEmailAlerts.map((alert) => {
+                  const hasLoc = alert.latitude !== null && alert.longitude !== null;
+                  const isSent = alert.status === "sent";
+                  const isFailed = alert.status === "failed";
+
+                  return (
+                    <tr key={alert.id} className="hover:bg-surface/50">
+                      <td className="py-3 pr-4 text-xs font-mono whitespace-nowrap">
+                        {formatDateTime(alert.created_at)}
+                      </td>
+                      <td className="py-3 pr-4 text-xs font-medium truncate max-w-[200px]">
+                        {alert.email_sent_to || "N/A"}
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-muted-foreground truncate max-w-[250px]">
+                        {alert.message || "—"}
+                      </td>
+                      <td className="py-3 pr-4 text-xs">
+                        {hasLoc ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${alert.latitude},${alert.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-primary hover:underline font-mono text-[11px]"
+                          >
+                            <MapPin size={14} /> {alert.latitude?.toFixed(4)}, {alert.longitude?.toFixed(4)}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-[11px] font-sans">Unavailable</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-right whitespace-nowrap">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium uppercase tracking-wider ${isSent
+                              ? "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400"
+                              : isFailed
+                                ? "bg-red-500/12 text-red-600 dark:text-red-400"
+                                : "bg-amber-500/12 text-amber-600 dark:text-amber-400"
+                            }`}
+                        >
+                          {alert.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </Card>
       ) : null}
 
@@ -389,11 +556,11 @@ function SosPage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <Siren size={22} weight="fill" className="text-emergency" />
-              Send emergency SOS?
+              Send Emergency SOS & Alert Email?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This alerts {contacts.length} emergency contact{contacts.length === 1 ? "" : "s"} and the
-              PHOENIX safety command center with your live location. Only use it in a real emergency.
+              This will trigger a live SOS alert and send an emergency email to{" "}
+              <strong className="text-foreground">{configuredEmail}</strong> via Supabase Edge Function & Resend.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -407,11 +574,80 @@ function SosPage() {
               ) : (
                 <CheckCircle size={18} />
               )}
-              Yes, send SOS
+              Yes, send Emergency Alert
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Quick Configure Emergency Contact Dialog */}
+      <Dialog open={quickContactOpen} onOpenChange={setQuickContactOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <EnvelopeSimple size={22} className="text-primary" /> Configure Emergency Contact Email
+            </DialogTitle>
+            <DialogDescription>
+              Set the emergency contact recipient who will receive automated email alerts whenever you trigger an SOS.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveQuickContact.mutate();
+            }}
+            className="space-y-4 py-2"
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="quick_name">Contact Full Name *</Label>
+              <Input
+                id="quick_name"
+                value={quickName}
+                onChange={(e) => setQuickName(e.target.value)}
+                placeholder="e.g. Jane Mercer"
+                maxLength={100}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="quick_email">Emergency Contact Email *</Label>
+              <Input
+                id="quick_email"
+                type="email"
+                value={quickEmail}
+                onChange={(e) => setQuickEmail(e.target.value)}
+                placeholder="contact@example.com"
+                maxLength={255}
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="quick_phone">Contact Phone (Optional)</Label>
+              <Input
+                id="quick_phone"
+                type="tel"
+                value={quickPhone}
+                onChange={(e) => setQuickPhone(e.target.value)}
+                placeholder="+1 555 0192"
+                maxLength={20}
+              />
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setQuickContactOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saveQuickContact.isPending}>
+                {saveQuickContact.isPending ? <SpinnerGap size={18} className="animate-spin" /> : null}
+                Save Contact & Enable SOS
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

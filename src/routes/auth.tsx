@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { motion } from "motion/react";
 import { Eye, EyeSlash, GoogleLogo, ShieldCheck, Siren, SpinnerGap } from "@phosphor-icons/react";
 import { supabase } from "@/integrations/supabase/client";
+import { cloudrailsSignIn, cloudrailsSignUp } from "@/integrations/cloudrails/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -104,25 +105,40 @@ function AuthPage() {
         return;
       }
       setSubmitting(true);
-      const { error } = await supabase.auth.signUp({
-        email: parsed.data.email,
-        password: parsed.data.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-          data: { full_name: parsed.data.fullName, phone: parsed.data.phone },
-        },
-      });
-      setSubmitting(false);
-      if (error) {
-        toast.error(
-          error.message.includes("already registered")
-            ? "That email already has an account. Try logging in."
-            : error.message,
+      try {
+        const crResult = await cloudrailsSignUp(
+          parsed.data.email,
+          parsed.data.password,
+          parsed.data.fullName,
+          parsed.data.phone,
         );
-        return;
+
+        if (!crResult.ok && crResult.error) {
+          // Fall back to Supabase auth if CloudRails backend endpoint is unreachable or errors
+          const { error } = await supabase.auth.signUp({
+            email: parsed.data.email,
+            password: parsed.data.password,
+            options: {
+              emailRedirectTo: `${window.location.origin}/dashboard`,
+              data: { full_name: parsed.data.fullName, phone: parsed.data.phone },
+            },
+          });
+          if (error) {
+            toast.error(
+              error.message.includes("already registered")
+                ? "That email already has an account. Try logging in."
+                : error.message,
+            );
+            return;
+          }
+        }
+        toast.success("Account created successfully. Welcome to PHOENIX.");
+        window.location.href = search.redirect ?? "/dashboard";
+      } catch {
+        toast.error("Registration failed. Please try again.");
+      } finally {
+        setSubmitting(false);
       }
-      toast.success("Account created. Welcome to PHOENIX.");
-      void navigate({ to: "/dashboard" });
       return;
     }
 
@@ -137,31 +153,43 @@ function AuthPage() {
       return;
     }
     setSubmitting(true);
-    const { error } = await supabase.auth.signInWithPassword(parsed.data);
-    setSubmitting(false);
-    if (error) {
-      toast.error(
-        error.message.includes("Invalid login")
-          ? "Incorrect email or password."
-          : error.message,
-      );
-      return;
+    try {
+      const crResult = await cloudrailsSignIn(parsed.data.email, parsed.data.password);
+      if (!crResult.ok) {
+        // Fall back to Supabase auth
+        const { error } = await supabase.auth.signInWithPassword(parsed.data);
+        if (error) {
+          toast.error(
+            error.message.includes("Invalid login") || crResult.error
+              ? "Incorrect email or password."
+              : error.message,
+          );
+          return;
+        }
+      }
+      toast.success("Welcome back.");
+      window.location.href = search.redirect ?? "/dashboard";
+    } catch {
+      toast.error("Sign in failed. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
-    toast.success("Welcome back.");
-    void navigate({ to: search.redirect ?? "/dashboard" });
   };
 
   const handleGoogle = async () => {
     setSubmitting(true);
+    const redirectParam = search.redirect ? `?redirect=${encodeURIComponent(search.redirect)}` : "";
+    const callbackUrl = `${window.location.origin}/auth/callback${redirectParam}`;
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}${search.redirect ?? "/dashboard"}`,
+        redirectTo: callbackUrl,
       },
     });
     if (error) {
       setSubmitting(false);
-      toast.error("Google sign-in failed. Please try again.");
+      toast.error(error.message || "Google sign-in failed. Please try again.");
     }
   };
 
@@ -220,15 +248,15 @@ function AuthPage() {
               <button
                 key={value}
                 type="button"
+                suppressHydrationWarning
                 onClick={() => {
                   setErrors({});
                   void navigate({ to: "/auth", search: { mode: value }, replace: true });
                 }}
-                className={`rounded-lg py-2 text-sm font-medium transition-colors ${
-                  mode === value
+                className={`rounded-lg py-2 text-sm font-medium transition-colors ${mode === value
                     ? "bg-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground"
-                }`}
+                  }`}
               >
                 {value === "login" ? "Login" : "Register"}
               </button>
